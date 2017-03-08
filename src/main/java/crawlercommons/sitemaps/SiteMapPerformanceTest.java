@@ -299,6 +299,7 @@ public class SiteMapPerformanceTest {
             LOG.error("  sitemap.useSax  if true use SAX parser to process sitemaps");
             LOG.error("  sitemap.strict  strict URL checking (no cross-submits)");
             LOG.error("  sitemap.partial accept URLs from partially parsed or invalid documents");
+            LOG.error("  warc.index      index WARC files and parse sitemap indexes recursively");
             System.exit(1);
         }
 

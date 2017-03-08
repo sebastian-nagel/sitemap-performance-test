@@ -43,3 +43,4 @@ Test performance of [crawler-commons](https://github.com/crawler-commons/crawler
   - `sitemap.useSax` (if true) use the SAX parser instead of the DOM parser
   - `sitemap.strict` (if true) check URLs whether they share the prefix (protocol, host, port, path without filename) with the sitemap URL
   - `sitemap.partial` (if true) relax the SAX parser to return also a parsed sitemap if the document is truncated or broken and was only partially parsed
+  - `warc.index` (if true) read the WARC file(s) ahead and index the records in a Map <url,record>. This causes some overhead in CPU time and memory but allows to parse sitemap indexes recursively.
