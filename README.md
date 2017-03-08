@@ -40,5 +40,6 @@ Test performance of [crawler-commons](https://github.com/crawler-commons/crawler
   ```
 
 4. set properties to modify the tests
-   - `sitemap.useSax` use the SAX parser instead of the DOM parser
-   - 
+  - `sitemap.useSax` (if true) use the SAX parser instead of the DOM parser
+  - `sitemap.strict` (if true) check URLs whether they share the prefix (protocol, host, port, path without filename) with the sitemap URL
+  - `sitemap.partial` (if true) relax the SAX parser to return also a parsed sitemap if the document is truncated or broken and was only partially parsed
