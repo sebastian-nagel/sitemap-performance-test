@@ -16,7 +16,9 @@
 
 package crawlercommons.sitemaps;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -27,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import org.apache.commons.httpclient.ChunkedInputStream;
 import org.apache.commons.httpclient.Header;
 import org.apache.commons.httpclient.HttpException;
 import org.apache.commons.httpclient.StatusLine;
@@ -60,6 +63,7 @@ public class SiteMapPerformanceTest {
         int status;
         int warcFileId;
         boolean isProcessed = false;
+        boolean isChunkedTransferEncoding = false;
         String contentType;
 
         private int parseHttpHeader(ArchiveRecord record) throws IOException {
@@ -80,6 +84,10 @@ public class SiteMapPerformanceTest {
                 // save MIME type sent by server
                 if (h.getName().equalsIgnoreCase("Content-Type")) {
                     contentType = h.getValue();
+                } else if (h.getName().equalsIgnoreCase("Transfer-Encoding")) {
+                    if (h.getValue().trim().equalsIgnoreCase("chunked")) {
+                        isChunkedTransferEncoding = true;
+                    }
                 }
             }
             return status;
@@ -103,7 +111,16 @@ public class SiteMapPerformanceTest {
         }
 
         public byte[] getContent(ArchiveRecord record) throws IOException {
-            return IOUtils.toByteArray(record, record.available());
+            byte[] content = IOUtils.toByteArray(record, record.available());
+            if (isChunkedTransferEncoding) {
+                try {
+                    ChunkedInputStream chunked = new ChunkedInputStream(new ByteArrayInputStream(content));
+                    return IOUtils.toByteArray(chunked);
+                } catch (IOException e) {
+                    LOG.warn("Failed to read chunked transfer encoding: {}", e);
+                }
+            }
+            return content;
         }
 
         public String toString() {
@@ -184,15 +201,23 @@ public class SiteMapPerformanceTest {
     }
     
     protected void processRecord(SiteMapParser parser, String urlString, WarcRecord record, byte[] content, boolean isSubsitemap) {
+        LOG.debug("Processing sitemap {}", urlString);
         if (record == null) {
             // try to achieve indexed record
             record = getRecord(urlString);
+            if (record == null) {
+                LOG.debug("No WARC record found for {}", urlString);
+                return;
+            }
         }
-        if (record == null || record.isProcessed) {
+        if (record.isProcessed) {
+            LOG.debug("WARC record already processed, skipping {}", urlString);
             return;
         }
         record.isProcessed = true;
         if (record.status != 200) {
+            // TODO: follow redirects if indexed
+            LOG.warn("Failed to fetch {} (HTTP status = {})", urlString, record.status);
             counter.failedFetches++;
             return;
         }
@@ -201,7 +226,6 @@ public class SiteMapPerformanceTest {
         } else {
             counter.processed++;
         }
-        LOG.debug("Processing sitemap {}", urlString);
         if (content == null) {
             try {
                 content = record.getContent();
@@ -221,19 +245,19 @@ public class SiteMapPerformanceTest {
         }
         long start = System.currentTimeMillis();
         try {
-            LOG.debug("Processing sitemap {}", url);
+            LOG.debug("Parsing sitemap {}", url);
             sitemap = parser.parseSiteMap(content, url);
         } catch (UnknownFormatException e) {
-            LOG.error("Failed to process sitemap {}: {}", urlString, e);
+            LOG.error("Failed to parse sitemap {}: {}", urlString, e);
             counter.failedParses++;
             return;
         } catch (IOException e) {
             LOG.error("Error processing sitemap {}: {}", urlString, e);
-            counter.failedFetches++;
+            counter.failedParses++;
             return;
         } finally {
             long elapsed = (System.currentTimeMillis() - start);
-            if (elapsed > 1000) {
+            if (elapsed > 300) {
                 LOG.warn("Process sitemap {} took {}ms", urlString, elapsed);
             }
         }
