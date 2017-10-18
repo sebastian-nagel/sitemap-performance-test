@@ -8,7 +8,7 @@ CLASS="crawlercommons.sitemaps.SiteMapPerformanceTest"
 JAVA_OPTS=""
 while [[ $# -gt 0 ]]; do
 	case "$1" in
-		-D* )
+		-D* | -X*)
 			JAVA_OPTS="$JAVA_OPTS $1"
 			shift
 			;;

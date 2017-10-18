@@ -18,16 +18,17 @@ package crawlercommons.sitemaps;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.apache.commons.httpclient.ChunkedInputStream;
 import org.apache.commons.httpclient.Header;
@@ -55,6 +56,7 @@ public class SiteMapPerformanceTest {
     protected Counter counter = new Counter();
 
     protected boolean indexed = new Boolean(System.getProperty("warc.index"));
+    protected String urlToBeParsed = System.getProperty("warc.parse.url");
 
 
     protected class WarcRecord {
@@ -152,14 +154,21 @@ public class SiteMapPerformanceTest {
             records.put(url, warcRecord);
         }
     }
-    
+
     protected class ArchiveRecordSitemapParser implements ArchiveRecordProcessor {
         private SiteMapParser parser;
+        private Set<String> acceptedUrls = new HashSet<>();
         public ArchiveRecordSitemapParser(SiteMapParser parser) {
             this.parser = parser;
         }
+        public void filterAllowUrl(String url) {
+            acceptedUrls.add(url);
+        }
         public void process(ArchiveRecord record) throws IOException {
             String url = record.getHeader().getUrl();
+            if (!acceptedUrls.isEmpty() && !acceptedUrls.contains(url)) {
+                return;
+            }
             WarcRecord warcRecord = new WarcRecord(record);
             byte[] content = warcRecord.getContent(record);
             processRecord(parser, url, warcRecord, content, false);
@@ -271,7 +280,9 @@ public class SiteMapPerformanceTest {
                 }
             }
         } else {
-            counter.nUrls += ((SiteMap) sitemap).getSiteMapUrls().size();
+            int size = ((SiteMap) sitemap).getSiteMapUrls().size();
+            LOG.info("Extracted {} URLs from {}", size, urlString);
+            counter.nUrls += size;
         }
         if ((counter.processed % 50) == 0) {
             LOG.info("Processed {} sitemaps, {} URLs extracted.", counter.processed, counter.nUrls);
@@ -291,14 +302,25 @@ public class SiteMapPerformanceTest {
             }
         }
 
-        long start = System.currentTimeMillis();
+        if (urlToBeParsed != null) {
+            LOG.info("Parsing sitemap for URL <{}>", this.urlToBeParsed);
+        }
         
+        long start = System.currentTimeMillis();
+
         if (indexed) {
-            for (Entry<String, WarcRecord> e: records.entrySet()) {
-                processRecord(parser, e.getKey(), e.getValue(), null, false);
+            for (Entry<String, WarcRecord> e : records.entrySet()) {
+                if (urlToBeParsed == null || urlToBeParsed.equals(e.getKey())) {
+                    processRecord(parser, e.getKey(), e.getValue(), null, false);
+                } else {
+                    LOG.debug("Skipping URL <{}>", e.getKey());
+                }
             }
         } else {
-            ArchiveRecordProcessor proc = new ArchiveRecordSitemapParser(parser);
+            ArchiveRecordSitemapParser proc = new ArchiveRecordSitemapParser(parser);
+            if (urlToBeParsed != null) {
+                proc.filterAllowUrl(urlToBeParsed);
+            }
             for (String warcPath : warcPaths) {
                 readWarcFile(warcPath, proc);
             }
@@ -320,10 +342,13 @@ public class SiteMapPerformanceTest {
         if (args.length < 1) {
             LOG.error("Usage:  SiteMapPerformanceTest <WARC-file>...");
             LOG.error("Java properties:");
-            LOG.error("  sitemap.useSax  if true use SAX parser to process sitemaps");
-            LOG.error("  sitemap.strict  strict URL checking (no cross-submits)");
-            LOG.error("  sitemap.partial accept URLs from partially parsed or invalid documents");
-            LOG.error("  warc.index      index WARC files and parse sitemap indexes recursively");
+            LOG.error("  sitemap.useSax  (boolean) use SAX parser to process sitemaps");
+            LOG.error("  sitemap.strict  (boolean) strict URL checking (no cross-submits)");
+            LOG.error("  sitemap.partial (boolean) accept URLs from partially parsed or invalid documents");
+            LOG.error("  sitemap.strictNamespace (boolean) enable strict namespace checking");
+            LOG.error("  warc.index      (boolean) index WARC files and parse sitemap indexes recursively");
+            LOG.error("  warc.parse.url  (String/URL) parse sitemap indexed by URL");
+            LOG.error("                            (recursively if it's a sitemap index and warc.index is true)");
             System.exit(1);
         }
 
@@ -336,6 +361,8 @@ public class SiteMapPerformanceTest {
         } else {
             parser = new SiteMapParser(sitemapStrict);
         }
+        boolean sitemapStrictNamespace = new Boolean(System.getProperty("sitemap.strictNamespace"));
+        parser.setStrictNamespace(sitemapStrictNamespace);
         LOG.info("Using {}", parser.getClass());
 
         SiteMapPerformanceTest test = new SiteMapPerformanceTest();
