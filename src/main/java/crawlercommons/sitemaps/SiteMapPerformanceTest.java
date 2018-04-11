@@ -281,7 +281,7 @@ public class SiteMapPerformanceTest {
             }
         } else {
             int size = ((SiteMap) sitemap).getSiteMapUrls().size();
-            LOG.info("Extracted {} URLs from {}", size, urlString);
+            LOG.info("Extracted {} URLs from {} ({})", size, urlString, sitemap.getType());
             counter.nUrls += size;
         }
         if ((counter.processed % 50) == 0) {
@@ -342,7 +342,6 @@ public class SiteMapPerformanceTest {
         if (args.length < 1) {
             LOG.error("Usage:  SiteMapPerformanceTest <WARC-file>...");
             LOG.error("Java properties:");
-            LOG.error("  sitemap.useSax  (boolean) use SAX parser to process sitemaps");
             LOG.error("  sitemap.strict  (boolean) strict URL checking (no cross-submits)");
             LOG.error("  sitemap.partial (boolean) accept URLs from partially parsed or invalid documents");
             LOG.error("  sitemap.strictNamespace (boolean) enable strict namespace checking");
@@ -352,15 +351,9 @@ public class SiteMapPerformanceTest {
             System.exit(1);
         }
 
-        SiteMapParser parser;
-        boolean useSaxParser = new Boolean(System.getProperty("sitemap.useSax"));
         boolean sitemapStrict = new Boolean(System.getProperty("sitemap.strict"));
-        if (useSaxParser) {
-            boolean sitemapPartial = new Boolean(System.getProperty("sitemap.partial"));
-            parser = new SiteMapParserSAX(sitemapStrict, sitemapPartial);
-        } else {
-            parser = new SiteMapParser(sitemapStrict);
-        }
+        boolean sitemapPartial = new Boolean(System.getProperty("sitemap.partial"));
+        SiteMapParser parser = new SiteMapParser(sitemapStrict, sitemapPartial);
         boolean sitemapStrictNamespace = new Boolean(System.getProperty("sitemap.strictNamespace"));
         parser.setStrictNamespace(sitemapStrictNamespace);
         LOG.info("Using {}", parser.getClass());
