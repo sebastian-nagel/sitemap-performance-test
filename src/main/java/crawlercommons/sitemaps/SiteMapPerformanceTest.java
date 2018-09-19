@@ -16,144 +16,30 @@
 
 package crawlercommons.sitemaps;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
-import org.apache.commons.httpclient.ChunkedInputStream;
-import org.apache.commons.httpclient.Header;
-import org.apache.commons.httpclient.HttpException;
-import org.apache.commons.httpclient.StatusLine;
-import org.apache.commons.httpclient.util.EncodingUtil;
-import org.apache.commons.io.IOUtils;
-import org.archive.format.arc.ARCConstants;
 import org.archive.io.ArchiveRecord;
-import org.archive.io.ArchiveRecordHeader;
-import org.archive.io.warc.WARCReader;
-import org.archive.io.warc.WARCReaderFactory;
-import org.archive.util.LaxHttpParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import crawlercommons.sitemaps.AbstractSiteMap.SitemapType;   
 
-public class SiteMapPerformanceTest {
+public class SiteMapPerformanceTest extends WarcTestProcessor {
 
     private static Logger LOG = LoggerFactory.getLogger(SiteMapPerformanceTest.class);
     
-    protected Map<String,WarcRecord> records = new LinkedHashMap<>();
-    protected List<String> warcFiles = new ArrayList<>();
     protected Counter counter = new Counter();
 
     protected boolean indexed = new Boolean(System.getProperty("warc.index"));
     protected String urlToBeParsed = System.getProperty("warc.parse.url");
-
-
-    protected class WarcRecord {
-        long offset;
-        long contentOffset;
-        int status;
-        int warcFileId;
-        boolean isProcessed = false;
-        boolean isChunkedTransferEncoding = false;
-        String contentType;
-
-        private int parseHttpHeader(ArchiveRecord record) throws IOException {
-            byte[] statusBytes = LaxHttpParser.readRawLine(record);
-            String statusLineStr = EncodingUtil.getString(statusBytes, 0, statusBytes.length, ARCConstants.DEFAULT_ENCODING);
-            if ((statusLineStr == null) || !StatusLine.startsWithHTTP(statusLineStr)) {
-                LOG.error("Invalid HTTP status line: {}", statusLineStr);
-            }
-            int status = 0;
-            try {
-                StatusLine statusLine = new StatusLine(statusLineStr.trim());
-                status = statusLine.getStatusCode();
-            } catch (HttpException e) {
-                LOG.error("Invalid HTTP status line '{}': {}", statusLineStr, e.getMessage());
-            }
-            Header[] headers = LaxHttpParser.parseHeaders(record, ARCConstants.DEFAULT_ENCODING);
-            for (Header h : headers) {
-                // save MIME type sent by server
-                if (h.getName().equalsIgnoreCase("Content-Type")) {
-                    contentType = h.getValue();
-                } else if (h.getName().equalsIgnoreCase("Transfer-Encoding")) {
-                    if (h.getValue().trim().equalsIgnoreCase("chunked")) {
-                        isChunkedTransferEncoding = true;
-                    }
-                }
-            }
-            return status;
-        }
-
-        public WarcRecord(ArchiveRecord record) throws IOException {
-            ArchiveRecordHeader header = record.getHeader();
-            offset = header.getOffset();
-            status = parseHttpHeader(record);
-            contentOffset = record.getPosition()+1;
-        }
-        
-        public byte[] getContent() throws IOException {
-            // must re-open WARC file, no backward seek supported, no forward seek in gzipped WARC files
-            WARCReader reader = WARCReaderFactory.get(warcFiles.get(warcFileId));
-            ArchiveRecord record = reader.get(offset);
-            record.skip(contentOffset); // skip HTTP header
-            byte[] content = getContent(record);
-            reader.close();
-            return content;
-        }
-
-        public byte[] getContent(ArchiveRecord record) throws IOException {
-            byte[] content = IOUtils.toByteArray(record, record.available());
-            if (isChunkedTransferEncoding) {
-                try {
-                    ChunkedInputStream chunked = new ChunkedInputStream(new ByteArrayInputStream(content));
-                    return IOUtils.toByteArray(chunked);
-                } catch (IOException e) {
-                    LOG.warn("Failed to read chunked transfer encoding: {}", e);
-                }
-            }
-            return content;
-        }
-
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("warc-file-id=").append(warcFileId);
-            sb.append(", offset=").append(offset);
-            sb.append(", content-offset=").append(contentOffset);
-            sb.append(", status=").append(status);
-            return sb.toString();
-        }
-    }
-
-    protected interface ArchiveRecordProcessor {
-        public void process(ArchiveRecord record) throws IOException;
-    }
-
-    protected class ArchiveRecordIndexer implements ArchiveRecordProcessor {
-        private int warcId;
-        public ArchiveRecordIndexer(int warcId) {
-            this.warcId = warcId;
-        }
-        public void setWarcId(int warcId) {
-            this.warcId = warcId;
-        }
-        public void process(ArchiveRecord record) throws IOException {
-            String url = record.getHeader().getUrl();
-            WarcRecord warcRecord = new WarcRecord(record);
-            warcRecord.warcFileId = this.warcId;
-            records.put(url, warcRecord);
-        }
-    }
 
     protected class ArchiveRecordSitemapParser implements ArchiveRecordProcessor {
         private SiteMapParser parser;
@@ -165,7 +51,7 @@ public class SiteMapPerformanceTest {
             acceptedUrls.add(url);
         }
         public void process(ArchiveRecord record) throws IOException {
-            String url = record.getHeader().getUrl();
+            String url = getUrl(record);
             if (!acceptedUrls.isEmpty() && !acceptedUrls.contains(url)) {
                 return;
             }
@@ -175,36 +61,25 @@ public class SiteMapPerformanceTest {
         }
     }
 
-    public void readWarcFile(String warcPath, ArchiveRecordProcessor proc) throws MalformedURLException, IOException {
-        WARCReader reader = WARCReaderFactory.get(warcPath);
-        int records = 0;
-        for (ArchiveRecord record : reader) {
-            ArchiveRecordHeader header = record.getHeader();
-            if (!"application/http;msgtype=response".equals(header.getMimetype()))
-                continue;
-            records++;
-            proc.process(record);                
-            if ((records % 1000) == 0) {
-                LOG.info("Read {} WARC response records", records);
-            }
-        }
-        LOG.info("Read {} WARC response records from file {}", records, warcPath);
-    }
-
-    public WarcRecord getRecord(String url) {
-        return records.get(url);
-    }
-
-    protected class Counter {
-        int processed = 0;
+    protected class Counter extends WarcTestProcessor.Counter {
         int processedSubSitemaps = 0;
-        int failedFetches = 0;
-        int failedParses = 0;
+        int failedParse = 0;
         int nUrls = 0;
         Map<String,Integer> byType = new HashMap<>();
+
         public Counter() {
             for (SitemapType type : SitemapType.values()) {
                 byType.put(type.name(), 0);
+            }
+        }
+
+        public void log(Logger log) {
+            super.log(log);
+            log.info("{}\tfailed to parse sitemap", failedParse);
+            log.info("{}\tprocessed subsitemaps from sitemap indexes", counter.processedSubSitemaps);
+            log.info("{}\tURLs extracted from sitemaps", nUrls);
+            for (String type : byType.keySet()) {
+                log.info("{}\t{} sitemaps", byType.get(type), type);
             }
         }
     }
@@ -227,7 +102,7 @@ public class SiteMapPerformanceTest {
         if (record.status != 200) {
             // TODO: follow redirects if indexed
             LOG.warn("Failed to fetch {} (HTTP status = {})", urlString, record.status);
-            counter.failedFetches++;
+            counter.failedFetch++;
             return;
         }
         if (isSubsitemap) {
@@ -249,7 +124,7 @@ public class SiteMapPerformanceTest {
             url = new URL(urlString);
         } catch (MalformedURLException e) {
             LOG.error("Invalid URL {}: {}", urlString, e);
-            counter.failedFetches++;
+            counter.failedFetch++;
             return;
         }
         long start = System.currentTimeMillis();
@@ -258,11 +133,11 @@ public class SiteMapPerformanceTest {
             sitemap = parser.parseSiteMap(content, url);
         } catch (UnknownFormatException e) {
             LOG.error("Failed to parse sitemap {}: {}", urlString, e);
-            counter.failedParses++;
+            counter.failedParse++;
             return;
         } catch (IOException e) {
             LOG.error("Error processing sitemap {}: {}", urlString, e);
-            counter.failedParses++;
+            counter.failedParse++;
             return;
         } finally {
             long elapsed = (System.currentTimeMillis() - start);
@@ -327,14 +202,7 @@ public class SiteMapPerformanceTest {
         }
 
         LOG.info("Finished processing, elapsed: {} ms", (System.currentTimeMillis() - start));
-        LOG.info("{}\tprocessed sitemaps", counter.processed);
-        LOG.info("{}\tprocessed subsitemaps from sitemap indexes", counter.processedSubSitemaps);
-        LOG.info("{}\tfailed to fetch sitemap", counter.failedFetches);
-        LOG.info("{}\tfailed to parse sitemap", counter.failedParses);
-        LOG.info("{}\tURLs extracted from sitemaps", counter.nUrls);
-        for (String type : counter.byType.keySet()) {
-            LOG.info("{}\t{} sitemaps", counter.byType.get(type), type);
-        }
+        counter.log(LOG);
     }
 
     public static void main(String[] args) throws MalformedURLException, IOException {
@@ -345,6 +213,8 @@ public class SiteMapPerformanceTest {
             LOG.error("  sitemap.strict  (boolean) strict URL checking (no cross-submits)");
             LOG.error("  sitemap.partial (boolean) accept URLs from partially parsed or invalid documents");
             LOG.error("  sitemap.strictNamespace (boolean) enable strict namespace checking");
+            LOG.error("  sitemap.lazyNamespace (boolean) enable lazy namespace checking");
+            //LOG.error("  sitemap.disableMimeDetection (boolean) disable detection of MIME types");
             LOG.error("  warc.index      (boolean) index WARC files and parse sitemap indexes recursively");
             LOG.error("  warc.parse.url  (String/URL) parse sitemap indexed by URL");
             LOG.error("                            (recursively if it's a sitemap index and warc.index is true)");
@@ -356,6 +226,13 @@ public class SiteMapPerformanceTest {
         SiteMapParser parser = new SiteMapParser(sitemapStrict, sitemapPartial);
         boolean sitemapStrictNamespace = new Boolean(System.getProperty("sitemap.strictNamespace"));
         parser.setStrictNamespace(sitemapStrictNamespace);
+        boolean sitemapLazyNamespace = new Boolean(System.getProperty("sitemap.lazyNamespace"));
+        if (sitemapLazyNamespace) {
+            parser.setStrictNamespace(true);
+            parser.addAcceptedNamespace(Namespace.SITEMAP_LEGACY);
+            parser.addAcceptedNamespace(Namespace.NEWS);
+            parser.addAcceptedNamespace(Namespace.EMPTY);
+        }
         LOG.info("Using {}", parser.getClass());
 
         SiteMapPerformanceTest test = new SiteMapPerformanceTest();

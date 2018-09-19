@@ -3,7 +3,7 @@
 DIR=$(dirname $0)
 
 
-CLASS="crawlercommons.sitemaps.SiteMapPerformanceTest"
+CLASS=${CLASS:-crawlercommons.sitemaps.SiteMapPerformanceTest}
 
 JAVA_OPTS=""
 while [[ $# -gt 0 ]]; do

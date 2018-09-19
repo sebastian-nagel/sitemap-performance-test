@@ -12,16 +12,17 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <javac.src.version>1.8</javac.src.version>
-    <javac.target.version>1.8</javac.target.version>
-    <maven.compiler.target>1.8</maven.compiler.target>
+    <java.version>1.8</java.version>
+    <javac.src.version>${java.version}</javac.src.version>
+    <javac.target.version>${java.version}</javac.target.version>
+    <maven.compiler.target>${java.version}</maven.compiler.target>
   </properties>
 
   <dependencies>
     <dependency>
       <groupId>com.github.crawler-commons</groupId>
       <artifactId>crawler-commons</artifactId>
-      <version>0.10-SNAPSHOT</version>
+      <version>0.11-SNAPSHOT</version>
     </dependency>
 
     <dependency>
@@ -48,6 +49,12 @@
     </dependency>
 
     <dependency>
+      <groupId>com.rometools</groupId>
+      <artifactId>rome</artifactId>
+      <version>1.9.0</version>
+    </dependency>
+
+    <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-log4j12</artifactId>
       <version>1.7.7</version>
@@ -60,8 +67,8 @@
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.5.1</version>
         <configuration>
-            <source>1.7</source>
-            <target>1.7</target>
+            <source>${javac.src.version}</source>
+            <target>${javac.target.version}</target>
         </configuration>
     </plugin>
   </plugins></build>
