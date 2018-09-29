@@ -6,6 +6,7 @@ import java.net.MalformedURLException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.apache.commons.httpclient.ChunkedInputStream;
@@ -169,11 +170,15 @@ public abstract class WarcTestProcessor {
         int failedFetch = 0;
         int success = 0;
 
+        protected String f(int n) {
+            return String.format(Locale.ROOT, "%8d", n);
+        }
+
         public void log(Logger log) {
-            log.info("{}\tdocuments processed total", processed);
-            log.info("{}\tsuccessfully processed", success);
-            log.info("{}\tfailed to process", (processed - success));
-            log.info("{}\tfailed to fetch document", failedFetch);
+            log.info("{}\tdocuments processed total", f(processed));
+            log.info("{}\tsuccessfully processed", f(success));
+            log.info("{}\tfailed to process", f(processed - success));
+            log.info("{}\tfailed to fetch document", f(failedFetch));
         }
     }
 

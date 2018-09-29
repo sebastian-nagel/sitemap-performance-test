@@ -25,12 +25,14 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.TreeSet;
 
 import org.archive.io.ArchiveRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import crawlercommons.sitemaps.AbstractSiteMap.SitemapType;   
+import crawlercommons.sitemaps.AbstractSiteMap.SitemapType;
+import crawlercommons.sitemaps.extension.Extension;
 
 public class SiteMapPerformanceTest extends WarcTestProcessor {
 
@@ -39,6 +41,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
     protected Counter counter = new Counter();
 
     protected boolean indexed = new Boolean(System.getProperty("warc.index"));
+    protected boolean enableSitemapExtensions = new Boolean(System.getProperty("sitemap.extensions"));
     protected String urlToBeParsed = System.getProperty("warc.parse.url");
 
     protected class ArchiveRecordSitemapParser implements ArchiveRecordProcessor {
@@ -66,6 +69,8 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
         int failedParse = 0;
         int nUrls = 0;
         Map<String,Integer> byType = new HashMap<>();
+        int nUrlsWithExtension = 0;
+        Map<String,Integer> urlsWithExtension = new HashMap<>();
 
         public Counter() {
             for (SitemapType type : SitemapType.values()) {
@@ -75,11 +80,15 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
 
         public void log(Logger log) {
             super.log(log);
-            log.info("{}\tfailed to parse sitemap", failedParse);
-            log.info("{}\tprocessed subsitemaps from sitemap indexes", counter.processedSubSitemaps);
-            log.info("{}\tURLs extracted from sitemaps", nUrls);
+            log.info("{}\tfailed to parse sitemap", f(failedParse));
+            log.info("{}\tprocessed subsitemaps from sitemap indexes", f(counter.processedSubSitemaps));
+            log.info("{}\tURLs extracted from sitemaps", f(nUrls));
             for (String type : byType.keySet()) {
-                log.info("{}\t{} sitemaps", byType.get(type), type);
+                log.info("{}\t{} sitemaps", f(byType.get(type)), type);
+            }
+            log.info("{}\tURLs with sitemap extension attribute(s):", f(nUrlsWithExtension));
+            for (String ext : urlsWithExtension.keySet()) {
+                log.info("{}\t{}", f(urlsWithExtension.get(ext)), ext);
             }
         }
     }
@@ -158,12 +167,31 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
             int size = ((SiteMap) sitemap).getSiteMapUrls().size();
             LOG.info("Extracted {} URLs from {} ({})", size, urlString, sitemap.getType());
             counter.nUrls += size;
+            Set<Extension> usedExtensions = new TreeSet<>();
+            if (enableSitemapExtensions) {
+                for (SiteMapURL su : ((SiteMap) sitemap).getSiteMapUrls()) {
+                    if (su.getAttributes() != null) {
+                        counter.nUrlsWithExtension++;
+                        for (Extension ext : su.getAttributes().keySet()) {
+                            usedExtensions.add(ext);
+                            Integer cnt = counter.urlsWithExtension.get(ext.toString());
+                            counter.urlsWithExtension.put(ext.toString(), cnt == null ? 1 : 1 + cnt);
+                        }
+                    }
+                }
+                for (Extension ext : usedExtensions) {
+                    String extType = "  XML " + ext.toString() + " sitemaps";
+                    Integer cnt = counter.byType.get(extType);
+                    counter.byType.put(extType, cnt == null ? 1 : 1 + cnt);
+                }
+            }
         }
         if ((counter.processed % 50) == 0) {
             LOG.info("Processed {} sitemaps, {} URLs extracted.", counter.processed, counter.nUrls);
         }
         String type = sitemap.getType().toString();
         counter.byType.put(type, counter.byType.get(type) + 1);
+        counter.success++;
     }
 
     public void run(SiteMapParser parser, String[] warcPaths) throws MalformedURLException, IOException {
@@ -214,12 +242,15 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
             LOG.error("  sitemap.partial (boolean) accept URLs from partially parsed or invalid documents");
             LOG.error("  sitemap.strictNamespace (boolean) enable strict namespace checking");
             LOG.error("  sitemap.lazyNamespace (boolean) enable lazy namespace checking");
+            LOG.error("  sitemap.extension (boolean) enable support for sitemap extensions");
             //LOG.error("  sitemap.disableMimeDetection (boolean) disable detection of MIME types");
             LOG.error("  warc.index      (boolean) index WARC files and parse sitemap indexes recursively");
             LOG.error("  warc.parse.url  (String/URL) parse sitemap indexed by URL");
             LOG.error("                            (recursively if it's a sitemap index and warc.index is true)");
             System.exit(1);
         }
+
+        SiteMapPerformanceTest test = new SiteMapPerformanceTest();
 
         boolean sitemapStrict = new Boolean(System.getProperty("sitemap.strict"));
         boolean sitemapPartial = new Boolean(System.getProperty("sitemap.partial"));
@@ -230,12 +261,13 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
         if (sitemapLazyNamespace) {
             parser.setStrictNamespace(true);
             parser.addAcceptedNamespace(Namespace.SITEMAP_LEGACY);
-            parser.addAcceptedNamespace(Namespace.NEWS);
             parser.addAcceptedNamespace(Namespace.EMPTY);
         }
+        if (test.enableSitemapExtensions) {
+            parser.enableExtensions();
+            parser.setStrictNamespace(true);
+        }
         LOG.info("Using {}", parser.getClass());
-
-        SiteMapPerformanceTest test = new SiteMapPerformanceTest();
 
         test.run(parser, args);
     }
