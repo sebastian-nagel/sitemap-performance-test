@@ -242,8 +242,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
             LOG.error("  sitemap.partial (boolean) accept URLs from partially parsed or invalid documents");
             LOG.error("  sitemap.strictNamespace (boolean) enable strict namespace checking");
             LOG.error("  sitemap.lazyNamespace (boolean) enable lazy namespace checking");
-            LOG.error("  sitemap.extension (boolean) enable support for sitemap extensions");
-            //LOG.error("  sitemap.disableMimeDetection (boolean) disable detection of MIME types");
+            LOG.error("  sitemap.extensions (boolean) enable support for sitemap extensions");
             LOG.error("  warc.index      (boolean) index WARC files and parse sitemap indexes recursively");
             LOG.error("  warc.parse.url  (String/URL) parse sitemap indexed by URL");
             LOG.error("                            (recursively if it's a sitemap index and warc.index is true)");
