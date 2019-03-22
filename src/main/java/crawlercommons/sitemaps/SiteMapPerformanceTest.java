@@ -266,7 +266,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
             parser.enableExtensions();
             parser.setStrictNamespace(true);
         }
-        LOG.info("Using {}", parser.getClass());
+        LOG.info("Using {} (crawler-commons v{})", parser.getClass(), crawlercommons.CrawlerCommons.getVersion());
 
         test.run(parser, args);
     }
