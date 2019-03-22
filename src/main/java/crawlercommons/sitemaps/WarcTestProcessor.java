@@ -39,6 +39,8 @@ public abstract class WarcTestProcessor {
         boolean isProcessed = false;
         boolean isChunkedTransferEncoding = false;
         String contentType;
+        ArchiveRecordHeader header;
+        Header[] httpHeaders;
 
         private int parseHttpHeader(ArchiveRecord record) throws IOException {
             byte[] statusBytes = LaxHttpParser.readRawLine(record);
@@ -53,8 +55,8 @@ public abstract class WarcTestProcessor {
             } catch (HttpException e) {
                 LOG.error("Invalid HTTP status line '{}': {}", statusLineStr, e.getMessage());
             }
-            Header[] headers = LaxHttpParser.parseHeaders(record, ARCConstants.DEFAULT_ENCODING);
-            for (Header h : headers) {
+            httpHeaders = LaxHttpParser.parseHeaders(record, ARCConstants.DEFAULT_ENCODING);
+            for (Header h : httpHeaders) {
                 // save MIME type sent by server
                 if (h.getName().equalsIgnoreCase("Content-Type")) {
                     contentType = h.getValue();
@@ -68,7 +70,7 @@ public abstract class WarcTestProcessor {
         }
 
         public WarcRecord(ArchiveRecord record) throws IOException {
-            ArchiveRecordHeader header = record.getHeader();
+            header = record.getHeader();
             offset = header.getOffset();
             status = parseHttpHeader(record);
             contentOffset = record.getPosition()+1;
