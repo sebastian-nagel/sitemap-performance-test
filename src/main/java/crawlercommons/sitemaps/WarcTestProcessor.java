@@ -79,6 +79,7 @@ public abstract class WarcTestProcessor {
         public byte[] getContent() throws IOException {
             // must re-open WARC file, no backward seek supported, no forward seek in gzipped WARC files
             WARCReader reader = WARCReaderFactory.get(warcFiles.get(warcFileId));
+            reader.setDigest(false);
             ArchiveRecord record = reader.get(offset);
             record.skip(contentOffset); // skip HTTP header
             byte[] content = getContent(record);
@@ -118,6 +119,7 @@ public abstract class WarcTestProcessor {
 
     public void readWarcFile(String warcPath, ArchiveRecordProcessor proc) throws MalformedURLException, IOException {
         WARCReader reader = WARCReaderFactory.get(warcPath);
+        reader.setDigest(false);
         int records = 0;
         for (ArchiveRecord record : reader) {
             ArchiveRecordHeader header = record.getHeader();
