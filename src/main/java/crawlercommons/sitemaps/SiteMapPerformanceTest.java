@@ -27,7 +27,8 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
 
-import org.archive.io.ArchiveRecord;
+import org.netpreserve.jwarc.WarcRecord;
+import org.netpreserve.jwarc.WarcResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,8 +41,8 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
     
     protected Counter counter = new Counter();
 
-    protected boolean indexed = new Boolean(System.getProperty("warc.index"));
-    protected boolean enableSitemapExtensions = new Boolean(System.getProperty("sitemap.extensions"));
+    protected boolean indexed = Boolean.valueOf(System.getProperty("warc.index"));
+    protected boolean enableSitemapExtensions = Boolean.valueOf(System.getProperty("sitemap.extensions"));
     protected String urlToBeParsed = System.getProperty("warc.parse.url");
 
     protected class ArchiveRecordSitemapParser implements ArchiveRecordProcessor {
@@ -53,14 +54,23 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
         public void filterAllowUrl(String url) {
             acceptedUrls.add(url);
         }
-        public void process(ArchiveRecord record) throws IOException {
-            String url = getUrl(record);
+        public void process(WarcRecord record, long offset) {
+            if (!(record instanceof WarcResponse)) {
+                return;
+            }
+            WarcResponse response = ((WarcResponse) record);
+            String url = response.target();
             if (!acceptedUrls.isEmpty() && !acceptedUrls.contains(url)) {
                 return;
             }
-            WarcRecord warcRecord = new WarcRecord(record);
-            byte[] content = warcRecord.getContent(record);
-            processRecord(parser, url, warcRecord, content, false);
+            try {
+                Record warcRecord = new Record(response, offset);
+                byte[] content = warcRecord.getContent(response);
+                processRecord(parser, url, warcRecord, content, false);
+            } catch (IOException | IllegalArgumentException e) { // TODO: remove IllegalArgumentException (jwarc#38)
+                LOG.error("Failed to process WARC record " + url, e);
+                counter.failedFetch++;
+            }
         }
     }
 
@@ -93,7 +103,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
         }
     }
     
-    protected void processRecord(SiteMapParser parser, String urlString, WarcRecord record, byte[] content, boolean isSubsitemap) {
+    protected void processRecord(SiteMapParser parser, String urlString, Record record, byte[] content, boolean isSubsitemap) {
         LOG.debug("Processing sitemap {}", urlString);
         if (record == null) {
             // try to achieve indexed record
@@ -200,8 +210,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
             for (String warcPath : warcPaths) {
                 int warcId = warcFiles.size();
                 ((ArchiveRecordIndexer) proc).setWarcId(warcId);
-                warcFiles.add(warcPath);
-                readWarcFile(warcPath, proc);
+               readWarcFile(warcPath, proc);
             }
         }
 
@@ -212,7 +221,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
         long start = System.currentTimeMillis();
 
         if (indexed) {
-            for (Entry<String, WarcRecord> e : records.entrySet()) {
+            for (Entry<String, Record> e : records.entrySet()) {
                 if (urlToBeParsed == null || urlToBeParsed.equals(e.getKey())) {
                     processRecord(parser, e.getKey(), e.getValue(), null, false);
                 } else {
@@ -251,12 +260,12 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
 
         SiteMapPerformanceTest test = new SiteMapPerformanceTest();
 
-        boolean sitemapStrict = new Boolean(System.getProperty("sitemap.strict"));
-        boolean sitemapPartial = new Boolean(System.getProperty("sitemap.partial"));
+        boolean sitemapStrict = Boolean.valueOf(System.getProperty("sitemap.strict"));
+        boolean sitemapPartial = Boolean.valueOf(System.getProperty("sitemap.partial"));
         SiteMapParser parser = new SiteMapParser(sitemapStrict, sitemapPartial);
-        boolean sitemapStrictNamespace = new Boolean(System.getProperty("sitemap.strictNamespace"));
+        boolean sitemapStrictNamespace = Boolean.valueOf(System.getProperty("sitemap.strictNamespace"));
         parser.setStrictNamespace(sitemapStrictNamespace);
-        boolean sitemapLazyNamespace = new Boolean(System.getProperty("sitemap.lazyNamespace"));
+        boolean sitemapLazyNamespace = Boolean.valueOf(System.getProperty("sitemap.lazyNamespace"));
         if (sitemapLazyNamespace) {
             parser.setStrictNamespace(true);
             parser.addAcceptedNamespace(Namespace.SITEMAP_LEGACY);

@@ -1,155 +1,163 @@
 package crawlercommons.sitemaps;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
-import org.apache.commons.httpclient.ChunkedInputStream;
-import org.apache.commons.httpclient.Header;
-import org.apache.commons.httpclient.HttpException;
-import org.apache.commons.httpclient.StatusLine;
-import org.apache.commons.httpclient.util.EncodingUtil;
-import org.apache.commons.io.IOUtils;
-import org.archive.format.arc.ARCConstants;
-import org.archive.io.ArchiveRecord;
-import org.archive.io.ArchiveRecordHeader;
-import org.archive.io.warc.WARCReader;
-import org.archive.io.warc.WARCReaderFactory;
-import org.archive.util.LaxHttpParser;
+import org.netpreserve.jwarc.MessageBody;
+import org.netpreserve.jwarc.MessageHeaders;
+import org.netpreserve.jwarc.WarcPayload;
+import org.netpreserve.jwarc.WarcReader;
+import org.netpreserve.jwarc.WarcRecord;
+import org.netpreserve.jwarc.WarcResponse;
+import org.netpreserve.jwarc.WarcTargetRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public abstract class WarcTestProcessor {
 
+    protected static final long MAX_PAYLOAD_SIZE = 128 * 1048576;
+    protected static final int BUFFER_SIZE = 8192;
+
     private static Logger LOG = LoggerFactory.getLogger(WarcTestProcessor.class);
 
-    protected Map<String,WarcRecord> records = new LinkedHashMap<>();
+    protected Map<String,Record> records = new LinkedHashMap<>();
     protected List<String> warcFiles = new ArrayList<>();
+    protected List<FileChannel> warcChannels = new ArrayList<>();
 
-    protected class WarcRecord {
+    protected class Record {
         long offset;
-        long contentOffset;
         int status;
         int warcFileId;
         boolean isProcessed = false;
-        boolean isChunkedTransferEncoding = false;
         String contentType;
-        ArchiveRecordHeader header;
-        Header[] httpHeaders;
+        MessageHeaders header;
+        MessageHeaders httpHeaders;
 
-        private int parseHttpHeader(ArchiveRecord record) throws IOException {
-            byte[] statusBytes = LaxHttpParser.readRawLine(record);
-            String statusLineStr = EncodingUtil.getString(statusBytes, 0, statusBytes.length, ARCConstants.DEFAULT_ENCODING);
-            if ((statusLineStr == null) || !StatusLine.startsWithHTTP(statusLineStr)) {
-                LOG.error("Invalid HTTP status line: {}", statusLineStr);
-            }
-            int status = 0;
-            try {
-                StatusLine statusLine = new StatusLine(statusLineStr.trim());
-                status = statusLine.getStatusCode();
-            } catch (HttpException e) {
-                LOG.error("Invalid HTTP status line '{}': {}", statusLineStr, e.getMessage());
-            }
-            httpHeaders = LaxHttpParser.parseHeaders(record, ARCConstants.DEFAULT_ENCODING);
-            for (Header h : httpHeaders) {
-                // save MIME type sent by server
-                if (h.getName().equalsIgnoreCase("Content-Type")) {
-                    contentType = h.getValue();
-                } else if (h.getName().equalsIgnoreCase("Transfer-Encoding")) {
-                    if (h.getValue().trim().equalsIgnoreCase("chunked")) {
-                        isChunkedTransferEncoding = true;
-                    }
-                }
-            }
+        private int parseHttpHeader(WarcResponse record) throws IOException {
+            httpHeaders = record.http().headers();
+            int status = record.http().status();
+            contentType = httpHeaders.first("Content-Type").orElse(null);
             return status;
         }
 
-        public WarcRecord(ArchiveRecord record) throws IOException {
-            header = record.getHeader();
-            offset = header.getOffset();
+        public Record(WarcResponse record, long offset) throws IOException {
+            header = record.headers();
+            this.offset = offset;
             status = parseHttpHeader(record);
-            contentOffset = record.getPosition()+1;
         }
 
         public byte[] getContent() throws IOException {
-            // must re-open WARC file, no backward seek supported, no forward seek in gzipped WARC files
-            WARCReader reader = WARCReaderFactory.get(warcFiles.get(warcFileId));
-            reader.setDigest(false);
-            ArchiveRecord record = reader.get(offset);
-            record.skip(contentOffset); // skip HTTP header
-            byte[] content = getContent(record);
-            reader.close();
-            return content;
-        }
-
-        public byte[] getContent(ArchiveRecord record) throws IOException {
-            byte[] content = IOUtils.toByteArray(record, record.available());
-            if (isChunkedTransferEncoding) {
-                try {
-                    ChunkedInputStream chunked = new ChunkedInputStream(new ByteArrayInputStream(content));
-                    return IOUtils.toByteArray(chunked);
-                } catch (IOException e) {
-                    String msg = e.getMessage();
-                    msg = msg.substring(0, Math.min(120, msg.length()));
-                    if (msg.indexOf('\n') != -1) {
-                        msg = msg.substring(0, msg.indexOf('\n'));
-                    }
-                    LOG.warn("Failed to read chunked transfer encoding: {}", msg);
-                    // could be an erroneous Transfer-Encoding header
-                    return content;
+            FileChannel channel = warcChannels.get(warcFileId);
+            channel.position(offset);
+            try (WarcReader warcReader = new WarcReader(channel)) {
+                Optional<WarcRecord> record = warcReader.next();
+                if (record.isPresent()) {
+                    return getContent((WarcResponse) record.get());
                 }
             }
-            return content;
+            throw new IOException("No Warc response record at offset " + offset);
+        }
+
+        public byte[] getContent(WarcResponse record) throws IOException {
+            Optional<WarcPayload> payload = record.payload();
+            if (!payload.isPresent()) {
+                return new byte[0];
+            }
+            MessageBody body = payload.get().body();
+            long size = body.size();
+            if (size > MAX_PAYLOAD_SIZE) {
+                throw new IOException("WARC payload too large");
+            }
+            ByteBuffer buf;
+            if (size >= 0) {
+                buf = ByteBuffer.allocate((int) size);
+            } else {
+                buf = ByteBuffer.allocate(BUFFER_SIZE);
+            }
+            /** dynamically growing list of buffers for large content of unknown size */
+            ArrayList<ByteBuffer> bufs = new ArrayList<>();
+            int r, read = 0;
+            while (true) {
+                try {
+                    if ((r = body.read(buf)) < 0) break;
+                } catch (Exception e) {
+                    LOG.error("Failed to read content of {}: {}", record.target(), e);
+                    break;
+                }
+                if (r == 0 && !buf.hasRemaining()) {
+                    buf.flip();
+                    bufs.add(buf);
+                    buf = ByteBuffer.allocate(BUFFER_SIZE);
+                }
+                read += r;
+            }
+            buf.flip();
+            if (read == size) {
+                return buf.array();
+            }
+            byte[] arr = new byte[read];
+            int pos = 0;
+            for (ByteBuffer b :bufs) {
+                r = b.remaining();
+                b.get(arr, pos, r);
+                pos += r;
+            }
+            buf.get(arr, pos, buf.remaining());
+            return arr;
         }
 
         public String toString() {
             StringBuilder sb = new StringBuilder();
             sb.append("warc-file-id=").append(warcFileId);
             sb.append(", offset=").append(offset);
-            sb.append(", content-offset=").append(contentOffset);
             sb.append(", status=").append(status);
             return sb.toString();
         }
     }
 
     public void readWarcFile(String warcPath, ArchiveRecordProcessor proc) throws MalformedURLException, IOException {
-        WARCReader reader = WARCReaderFactory.get(warcPath);
-        reader.setDigest(false);
-        int records = 0;
-        for (ArchiveRecord record : reader) {
-            ArchiveRecordHeader header = record.getHeader();
-            if (!("application/http;msgtype=response".equals(header.getMimetype()) || "application/http; msgtype=response".equals(header.getMimetype()))) {
-                continue;
+        FileChannel channel = FileChannel.open(Paths.get(warcPath));
+        warcFiles.add(warcPath);
+        warcChannels.add(channel);
+        try (WarcReader reader = new WarcReader(channel)) {
+            int records = 0;
+            for (WarcRecord record : reader) {
+                if (!(record instanceof WarcResponse)) {
+                    continue;
+                }
+                records++;
+                proc.process(record, reader.position());
+                if ((records % 1000) == 0) {
+                    LOG.info("Read {} WARC response records", records);
+                }
             }
-            records++;
-            proc.process(record);
-            if ((records % 1000) == 0) {
-                LOG.info("Read {} WARC response records", records);
-            }
+            LOG.info("Read {} WARC response records from file {}", records, warcPath);
         }
-        LOG.info("Read {} WARC response records from file {}", records, warcPath);
     }
 
-    public WarcRecord getRecord(String url) {
+    public Record getRecord(String url) {
         return records.get(url);
     }
 
     protected interface ArchiveRecordProcessor {
 
-        public void process(ArchiveRecord record) throws IOException;
+        public void process(WarcRecord record, long offset);
 
         /** Get URL, trimming <code>&lt;...&gt;</code> if needed */
-        public default String getUrl(ArchiveRecord record) {
-            String url = record.getHeader().getUrl();
-            if (url.startsWith("<")) {
-                url = url.substring(1, url.length() - 1);
+        public default String getUrl(WarcRecord record) {
+            if (!(record instanceof WarcTargetRecord)) {
+                return null;
             }
-            return url;
+            return ((WarcTargetRecord) record).target();
         }
     }
 
@@ -161,11 +169,19 @@ public abstract class WarcTestProcessor {
         public void setWarcId(int warcId) {
             this.warcId = warcId;
         }
-        public void process(ArchiveRecord record) throws IOException {
-            String url = record.getHeader().getUrl();
-            WarcRecord warcRecord = new WarcRecord(record);
-            warcRecord.warcFileId = this.warcId;
-            records.put(url, warcRecord);
+        public void process(WarcRecord record, long offset) {
+            if (!(record instanceof WarcResponse)) {
+                return;
+            }
+            String url = ((WarcTargetRecord) record).target();
+            try {
+                Record warcRecord = new Record((WarcResponse) record, offset);
+                warcRecord.warcFileId = this.warcId;
+                records.put(url, warcRecord);
+            } catch(IOException e) {
+                LOG.error("Failed to process WARC record " + url, e);
+                records.put(url, null);
+            }
         }
     }
 
