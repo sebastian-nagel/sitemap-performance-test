@@ -65,7 +65,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
             }
             try {
                 Record warcRecord = new Record(response, offset);
-                byte[] content = warcRecord.getContent(response);
+                byte[] content = getContent(response);
                 processRecord(parser, url, warcRecord, content, false);
             } catch (IOException | IllegalArgumentException e) { // TODO: remove IllegalArgumentException (jwarc#38)
                 LOG.error("Failed to process WARC record " + url, e);

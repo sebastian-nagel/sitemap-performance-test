@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -33,6 +34,8 @@ public abstract class WarcTestProcessor {
     protected List<String> warcFiles = new ArrayList<>();
     protected List<FileChannel> warcChannels = new ArrayList<>();
 
+    protected enum ContentEncoding { NOT_SUPPORTED, IDENTITY, GZIP, DEFLATE };
+
     protected class Record {
         long offset;
         int status;
@@ -61,59 +64,12 @@ public abstract class WarcTestProcessor {
             try (WarcReader warcReader = new WarcReader(channel)) {
                 Optional<WarcRecord> record = warcReader.next();
                 if (record.isPresent()) {
-                    return getContent((WarcResponse) record.get());
+                    return WarcTestProcessor.getContent((WarcResponse) record.get());
                 }
             }
             throw new IOException("No Warc response record at offset " + offset);
         }
 
-        public byte[] getContent(WarcResponse record) throws IOException {
-            Optional<WarcPayload> payload = record.payload();
-            if (!payload.isPresent()) {
-                return new byte[0];
-            }
-            MessageBody body = payload.get().body();
-            long size = body.size();
-            if (size > MAX_PAYLOAD_SIZE) {
-                throw new IOException("WARC payload too large");
-            }
-            ByteBuffer buf;
-            if (size >= 0) {
-                buf = ByteBuffer.allocate((int) size);
-            } else {
-                buf = ByteBuffer.allocate(BUFFER_SIZE);
-            }
-            /** dynamically growing list of buffers for large content of unknown size */
-            ArrayList<ByteBuffer> bufs = new ArrayList<>();
-            int r, read = 0;
-            while (true) {
-                try {
-                    if ((r = body.read(buf)) < 0) break;
-                } catch (Exception e) {
-                    LOG.error("Failed to read content of {}: {}", record.target(), e);
-                    break;
-                }
-                if (r == 0 && !buf.hasRemaining()) {
-                    buf.flip();
-                    bufs.add(buf);
-                    buf = ByteBuffer.allocate(BUFFER_SIZE);
-                }
-                read += r;
-            }
-            buf.flip();
-            if (read == size) {
-                return buf.array();
-            }
-            byte[] arr = new byte[read];
-            int pos = 0;
-            for (ByteBuffer b :bufs) {
-                r = b.remaining();
-                b.get(arr, pos, r);
-                pos += r;
-            }
-            buf.get(arr, pos, buf.remaining());
-            return arr;
-        }
 
         public String toString() {
             StringBuilder sb = new StringBuilder();
@@ -122,6 +78,102 @@ public abstract class WarcTestProcessor {
             sb.append(", status=").append(status);
             return sb.toString();
         }
+    }
+
+    private static ContentEncoding getContentEncoding(WarcResponse record) throws IOException {
+        List<String> contentEncodings = record.http().headers().all("Content-Encoding");
+        if (contentEncodings.isEmpty()) {
+            return ContentEncoding.IDENTITY;
+        } else if (contentEncodings.size() > 1) {
+            LOG.warn("Multiple Content-Encodings not supported: {}", contentEncodings);
+            return ContentEncoding.NOT_SUPPORTED;
+        }
+        switch (contentEncodings.get(0).toLowerCase(Locale.ROOT)) {
+            case "identity":
+            case "none":
+            case "":
+                return ContentEncoding.IDENTITY;
+            case "gzip":
+            case "x-gzip":
+                return ContentEncoding.GZIP;
+            case "deflate":
+                return ContentEncoding.DEFLATE;
+        }
+        LOG.warn("Unknown/unsupported Content-Encoding: {}", contentEncodings.get(0));
+        return ContentEncoding.NOT_SUPPORTED;
+    }
+
+    public static byte[] getContent(WarcResponse record) throws IOException {
+        return getContent(record, MAX_PAYLOAD_SIZE);
+    }
+
+    public static byte[] getContent(WarcResponse record, long maxSize) throws IOException {
+        Optional<WarcPayload> payload = record.payload();
+        if (!payload.isPresent()) {
+            return new byte[0];
+        }
+        MessageBody body = payload.get().body();
+        long size = body.size();
+        if (size > maxSize) {
+            throw new IOException("WARC payload too large");
+        }
+        // Wrap channel to decode/uncompress Content-Encoding
+        ReadableByteChannel bodyChan = body;
+        ContentEncoding contentEncoding = getContentEncoding(record);
+        switch (contentEncoding) {
+            case IDENTITY:
+                break;
+            case GZIP:
+            size = -1;
+            // TODO: jwarc 0.12.1 or upwards:
+            //    bodyChan = org.netpreserve.jwarc.IOUtils.gunzipChannel(body);
+            LOG.error("Content-Encoding `gzip` not yet supported for {}", record.target());
+                break;
+            case DEFLATE:
+            // TODO: jwarc 0.12.1 or upwards:
+            //    bodyChan = org.netpreserve.jwarc.IOUtils.inflateChannel(body);
+            LOG.error("Content-Encoding `deflate` not yet supported for {}", record.target());
+                break;
+            case NOT_SUPPORTED:
+                // even if unsupported: try to parse the sitemap
+                break;
+        }
+        ByteBuffer buf;
+        if (size >= 0) {
+            buf = ByteBuffer.allocate((int) size);
+        } else {
+            buf = ByteBuffer.allocate(BUFFER_SIZE);
+        }
+        /** dynamically growing list of buffers for large content of unknown size */
+        ArrayList<ByteBuffer> bufs = new ArrayList<>();
+        int r, read = 0;
+        while (true) {
+            try {
+                if ((r = bodyChan.read(buf)) < 0) break;
+            } catch (Exception e) {
+                LOG.error("Failed to read content of {}: {}", record.target(), e);
+                break;
+            }
+            if (r == 0 && !buf.hasRemaining()) {
+                buf.flip();
+                bufs.add(buf);
+                buf = ByteBuffer.allocate(BUFFER_SIZE);
+            }
+            read += r;
+        }
+        buf.flip();
+        if (read == size) {
+            return buf.array();
+        }
+        byte[] arr = new byte[read];
+        int pos = 0;
+        for (ByteBuffer b :bufs) {
+            r = b.remaining();
+            b.get(arr, pos, r);
+            pos += r;
+        }
+        buf.get(arr, pos, buf.remaining());
+        return arr;
     }
 
     public void readWarcFile(String warcPath, ArchiveRecordProcessor proc) throws MalformedURLException, IOException {
