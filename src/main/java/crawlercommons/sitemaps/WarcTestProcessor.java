@@ -124,15 +124,12 @@ public abstract class WarcTestProcessor {
             case IDENTITY:
                 break;
             case GZIP:
-            size = -1;
-            // TODO: jwarc 0.12.1 or upwards:
-            //    bodyChan = org.netpreserve.jwarc.IOUtils.gunzipChannel(body);
-            LOG.error("Content-Encoding `gzip` not yet supported for {}", record.target());
+                size = -1;
+                bodyChan = org.netpreserve.jwarc.IOUtils.gunzipChannel(body);
                 break;
             case DEFLATE:
-            // TODO: jwarc 0.12.1 or upwards:
-            //    bodyChan = org.netpreserve.jwarc.IOUtils.inflateChannel(body);
-            LOG.error("Content-Encoding `deflate` not yet supported for {}", record.target());
+                size = -1;
+                bodyChan = org.netpreserve.jwarc.IOUtils.inflateChannel(body);
                 break;
             case NOT_SUPPORTED:
                 // even if unsupported: try to parse the sitemap

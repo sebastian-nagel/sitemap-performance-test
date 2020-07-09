@@ -18,7 +18,8 @@
     <maven.compiler.target>${java.version}</maven.compiler.target>
     <slf4j-api.version>1.7.7</slf4j-api.version>
     <slf4j-log4j12.version>1.7.7</slf4j-log4j12.version>
-    <jwarc.version>0.12.0</jwarc.version>
+    <crawler-commons.version>1.1</crawler-commons.version>
+    <jwarc.version>0.13.0</jwarc.version>
     <junit.version>5.5.0</junit.version>
   </properties>
 
@@ -26,7 +27,7 @@
     <dependency>
       <groupId>com.github.crawler-commons</groupId>
       <artifactId>crawler-commons</artifactId>
-      <version>1.0</version>
+      <version>${crawler-commons.version}</version>
     </dependency>
 
     <dependency>
