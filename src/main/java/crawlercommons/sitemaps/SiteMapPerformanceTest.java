@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 
 import crawlercommons.sitemaps.AbstractSiteMap.SitemapType;
 import crawlercommons.sitemaps.extension.Extension;
+import crawlercommons.warcutils.WarcTestProcessor;
 
 public class SiteMapPerformanceTest extends WarcTestProcessor {
 
