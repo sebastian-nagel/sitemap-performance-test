@@ -1,12 +1,12 @@
 /**
  * Copyright 2016 Crawler-Commons
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -39,7 +39,7 @@ import crawlercommons.warcutils.WarcTestProcessor;
 public class SiteMapPerformanceTest extends WarcTestProcessor {
 
     private static Logger LOG = LoggerFactory.getLogger(SiteMapPerformanceTest.class);
-    
+
     protected Counter counter = new Counter();
 
     protected boolean indexed = Boolean.valueOf(System.getProperty("warc.index"));
@@ -55,6 +55,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
         public void filterAllowUrl(String url) {
             acceptedUrls.add(url);
         }
+        @Override
         public void process(WarcRecord record, long offset) {
             if (!(record instanceof WarcResponse)) {
                 return;
@@ -89,6 +90,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
             }
         }
 
+        @Override
         public void log(Logger log) {
             super.log(log);
             log.info("{}\tfailed to parse sitemap", f(failedParse));
@@ -103,7 +105,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
             }
         }
     }
-    
+
     protected void processRecord(SiteMapParser parser, String urlString, Record record, byte[] content, boolean isSubsitemap) {
         LOG.debug("Processing sitemap {}", urlString);
         if (record == null) {
@@ -218,7 +220,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
         if (urlToBeParsed != null) {
             LOG.info("Parsing sitemap for URL <{}>", this.urlToBeParsed);
         }
-        
+
         long start = System.currentTimeMillis();
 
         if (indexed) {
@@ -244,7 +246,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
     }
 
     public static void main(String[] args) throws MalformedURLException, IOException {
-        
+
         if (args.length < 1) {
             LOG.error("Usage:  SiteMapPerformanceTest <WARC-file>...");
             LOG.error("Java properties:");

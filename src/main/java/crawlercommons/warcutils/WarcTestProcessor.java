@@ -237,9 +237,14 @@ public abstract class WarcTestProcessor {
         public int processed = 0;
         public int failedFetch = 0;
         public int success = 0;
+        public long elapsed = 0;
 
-        protected String f(int n) {
+        protected String f(long n) {
             return String.format(Locale.ROOT, "%8d", n);
+        }
+
+        protected String fPercent(long n, long N) {
+            return String.format(Locale.ROOT, "%6.2f%%", 100.0 * n / N);
         }
 
         public void log(Logger log) {
@@ -247,6 +252,7 @@ public abstract class WarcTestProcessor {
             log.info("{}\tsuccessfully processed", f(success));
             log.info("{}\tfailed to process", f(processed - success));
             log.info("{}\tfailed to fetch document", f(failedFetch));
+            log.info("{}\ttotal time elapsed", f(elapsed));
         }
     }
 
