@@ -4,7 +4,7 @@
 
   <groupId>com.github.crawler-commons</groupId>
   <artifactId>sitemap-parser-test</artifactId>
-  <version>0.0.2-SNAPSHOT</version>
+  <version>0.0.3-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>sitemap-parser-test</name>
@@ -12,15 +12,15 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <java.version>1.8</java.version>
+    <java.version>11</java.version>
     <javac.src.version>${java.version}</javac.src.version>
     <javac.target.version>${java.version}</javac.target.version>
-    <maven.compiler.target>${java.version}</maven.compiler.target>
-    <slf4j-api.version>1.7.7</slf4j-api.version>
-    <slf4j-log4j12.version>1.7.7</slf4j-log4j12.version>
-    <crawler-commons.version>1.1</crawler-commons.version>
-    <jwarc.version>0.13.0</jwarc.version>
-    <junit.version>5.5.0</junit.version>
+    <maven.compiler.release>11</maven.compiler.release>
+    <slf4j.version>2.0.7</slf4j.version>
+    <crawler-commons.version>1.3</crawler-commons.version>
+    <rome.version>2.1.0</rome.version>
+    <jwarc.version>0.22.0</jwarc.version>
+    <junit.version>5.9.3</junit.version>
   </properties>
 
   <dependencies>
@@ -39,13 +39,19 @@
     <dependency>
       <groupId>com.rometools</groupId>
       <artifactId>rome</artifactId>
-      <version>1.12.2</version>
+      <version>${rome.version}</version>
     </dependency>
 
     <dependency>
       <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-log4j12</artifactId>
-      <version>${slf4j-log4j12.version}</version>
+      <artifactId>slf4j-api</artifactId>
+      <version>${slf4j.version}</version>
+    </dependency>
+
+     <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>${slf4j.version}</version>
       <scope>test</scope>
     </dependency>
 
@@ -80,7 +86,7 @@
     <repository>
       <id>crawler-commons-release-test</id>
       <name>Testing crawler-commons release candidates</name>
-      <url>https://oss.sonatype.org/content/repositories/comgithubcrawler-commons-1008/</url>
+      <url>https://oss.sonatype.org/content/repositories/comgithubcrawler-commons-1023/</url>
     </repository>
   </repositories-->
 </project>
