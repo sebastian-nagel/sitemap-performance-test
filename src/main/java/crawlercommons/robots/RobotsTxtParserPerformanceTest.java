@@ -18,6 +18,7 @@ package crawlercommons.robots;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -38,7 +39,7 @@ public class RobotsTxtParserPerformanceTest extends WarcTestProcessor {
 
     protected String urlToBeParsed = System.getProperty("warc.parse.url");
 
-    protected String robotName;
+    protected Collection<String> robotNames;
 
     protected class ArchiveRecordRobotsTxtParser implements ArchiveRecordProcessor {
 
@@ -155,7 +156,7 @@ public class RobotsTxtParserPerformanceTest extends WarcTestProcessor {
         long start = System.currentTimeMillis();
         try {
             LOG.debug("Parsing robots.txt {}", urlString);
-            rules = parser.parseContent(urlString, content, record.contentType, robotName);
+            rules = parser.parseContent(urlString, content, record.contentType, robotNames);
             LOG.debug(rules.toString());
             counter.countRules(rules);
         } finally {
@@ -207,7 +208,7 @@ public class RobotsTxtParserPerformanceTest extends WarcTestProcessor {
         if (robotName == null || robotName.isBlank()) {
             robotName = "*";
         }
-        test.robotName = robotName;
+        test.robotNames = Set.of(robotName);
         BaseRobotsParser parser = new SimpleRobotRulesParser();
         LOG.info("Parsing robots.txt files for robot \"{}\" using {} (crawler-commons v{})", robotName, parser.getClass(), crawlercommons.CrawlerCommons.getVersion());
 

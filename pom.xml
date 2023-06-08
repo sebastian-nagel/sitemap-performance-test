@@ -17,7 +17,7 @@
     <javac.target.version>${java.version}</javac.target.version>
     <maven.compiler.release>11</maven.compiler.release>
     <slf4j.version>2.0.7</slf4j.version>
-    <crawler-commons.version>1.3</crawler-commons.version>
+    <crawler-commons.version>1.4-SNAPSHOT</crawler-commons.version>
     <rome.version>2.1.0</rome.version>
     <jwarc.version>0.22.0</jwarc.version>
     <junit.version>5.9.3</junit.version>
