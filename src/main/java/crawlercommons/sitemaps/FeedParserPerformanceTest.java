@@ -97,7 +97,7 @@ public class FeedParserPerformanceTest extends SiteMapPerformanceTest {
         }
 
         SiteMapParser parser = new FeedParser();
-        boolean sitemapStrictNamespace = new Boolean(System.getProperty("sitemap.strictNamespace"));
+        boolean sitemapStrictNamespace = Boolean.valueOf(System.getProperty("sitemap.strictNamespace"));
         parser.setStrictNamespace(sitemapStrictNamespace);
         LOG.info("Using {}", parser.getClass());
 

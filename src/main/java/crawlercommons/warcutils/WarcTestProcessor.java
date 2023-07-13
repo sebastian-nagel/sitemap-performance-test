@@ -1,4 +1,4 @@
-package crawlercommons.sitemaps;
+package crawlercommons.warcutils;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -37,25 +37,24 @@ public abstract class WarcTestProcessor {
     protected enum ContentEncoding { NOT_SUPPORTED, IDENTITY, GZIP, DEFLATE };
 
     protected class Record {
-        long offset;
-        int status;
-        int warcFileId;
-        boolean isProcessed = false;
-        String contentType;
-        MessageHeaders header;
-        MessageHeaders httpHeaders;
+        public long offset;
+        public int status;
+        public int warcFileId;
+        public boolean isProcessed = false;
+        public String contentType;
+        public MessageHeaders header;
+        public MessageHeaders httpHeaders;
 
-        private int parseHttpHeader(WarcResponse record) throws IOException {
+        private void parseHttpHeader(WarcResponse record) throws IOException {
             httpHeaders = record.http().headers();
-            int status = record.http().status();
+            status = record.http().status();
             contentType = httpHeaders.first("Content-Type").orElse(null);
-            return status;
         }
 
         public Record(WarcResponse record, long offset) throws IOException {
             header = record.headers();
             this.offset = offset;
-            status = parseHttpHeader(record);
+            parseHttpHeader(record);
         }
 
         public byte[] getContent() throws IOException {
@@ -132,7 +131,7 @@ public abstract class WarcTestProcessor {
                 bodyChan = org.netpreserve.jwarc.IOUtils.inflateChannel(body);
                 break;
             case NOT_SUPPORTED:
-                // even if unsupported: try to parse the sitemap
+                // even if unsupported: try to parse the content
                 break;
         }
         ByteBuffer buf;
@@ -235,12 +234,17 @@ public abstract class WarcTestProcessor {
     }
 
     protected class Counter {
-        int processed = 0;
-        int failedFetch = 0;
-        int success = 0;
+        public int processed = 0;
+        public int failedFetch = 0;
+        public int success = 0;
+        public long elapsed = 0;
 
-        protected String f(int n) {
+        protected String f(long n) {
             return String.format(Locale.ROOT, "%8d", n);
+        }
+
+        protected String fPercent(long n, long N) {
+            return String.format(Locale.ROOT, "%6.2f%%", 100.0 * n / N);
         }
 
         public void log(Logger log) {
@@ -248,6 +252,7 @@ public abstract class WarcTestProcessor {
             log.info("{}\tsuccessfully processed", f(success));
             log.info("{}\tfailed to process", f(processed - success));
             log.info("{}\tfailed to fetch document", f(failedFetch));
+            log.info("{}\ttotal time elapsed", f(elapsed));
         }
     }
 
