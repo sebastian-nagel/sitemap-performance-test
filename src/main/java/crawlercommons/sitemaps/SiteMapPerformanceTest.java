@@ -166,6 +166,7 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
             if (elapsed > 300) {
                 LOG.warn("Process sitemap {} took {}ms", urlString, elapsed);
             }
+            counter.elapsed += elapsed;
         }
         if (sitemap.isIndex()) {
             if (isSubsitemap) {
