@@ -16,11 +16,11 @@
     <javac.src.version>${java.version}</javac.src.version>
     <javac.target.version>${java.version}</javac.target.version>
     <maven.compiler.release>11</maven.compiler.release>
-    <slf4j.version>2.0.7</slf4j.version>
+    <slf4j.version>2.0.17</slf4j.version>
     <crawler-commons.version>1.4</crawler-commons.version>
     <rome.version>2.1.0</rome.version>
-    <jwarc.version>0.24.1</jwarc.version>
-    <junit.version>5.10.0-RC1</junit.version>
+    <jwarc.version>0.31.1</jwarc.version>
+    <junit.version>5.13.1</junit.version>
   </properties>
 
   <dependencies>
