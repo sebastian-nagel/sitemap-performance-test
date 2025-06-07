@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -70,6 +69,7 @@ public abstract class WarcTestProcessor {
         }
 
 
+        @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
             sb.append("warc-file-id=").append(warcFileId);
@@ -77,29 +77,6 @@ public abstract class WarcTestProcessor {
             sb.append(", status=").append(status);
             return sb.toString();
         }
-    }
-
-    private static ContentEncoding getContentEncoding(WarcResponse record) throws IOException {
-        List<String> contentEncodings = record.http().headers().all("Content-Encoding");
-        if (contentEncodings.isEmpty()) {
-            return ContentEncoding.IDENTITY;
-        } else if (contentEncodings.size() > 1) {
-            LOG.warn("Multiple Content-Encodings not supported: {}", contentEncodings);
-            return ContentEncoding.NOT_SUPPORTED;
-        }
-        switch (contentEncodings.get(0).toLowerCase(Locale.ROOT)) {
-            case "identity":
-            case "none":
-            case "":
-                return ContentEncoding.IDENTITY;
-            case "gzip":
-            case "x-gzip":
-                return ContentEncoding.GZIP;
-            case "deflate":
-                return ContentEncoding.DEFLATE;
-        }
-        LOG.warn("Unknown/unsupported Content-Encoding: {}", contentEncodings.get(0));
-        return ContentEncoding.NOT_SUPPORTED;
     }
 
     public static byte[] getContent(WarcResponse record) throws IOException {
@@ -111,28 +88,10 @@ public abstract class WarcTestProcessor {
         if (!payload.isPresent()) {
             return new byte[0];
         }
-        MessageBody body = payload.get().body();
+        MessageBody body = record.http().bodyDecoded();
         long size = body.size();
         if (size > maxSize) {
             throw new IOException("WARC payload too large");
-        }
-        // Wrap channel to decode/uncompress Content-Encoding
-        ReadableByteChannel bodyChan = body;
-        ContentEncoding contentEncoding = getContentEncoding(record);
-        switch (contentEncoding) {
-            case IDENTITY:
-                break;
-            case GZIP:
-                size = -1;
-                bodyChan = org.netpreserve.jwarc.IOUtils.gunzipChannel(body);
-                break;
-            case DEFLATE:
-                size = -1;
-                bodyChan = org.netpreserve.jwarc.IOUtils.inflateChannel(body);
-                break;
-            case NOT_SUPPORTED:
-                // even if unsupported: try to parse the content
-                break;
         }
         ByteBuffer buf;
         if (size >= 0) {
@@ -145,7 +104,7 @@ public abstract class WarcTestProcessor {
         int r, read = 0;
         while (true) {
             try {
-                if ((r = bodyChan.read(buf)) < 0) break;
+                if ((r = body.read(buf)) < 0) break;
             } catch (Exception e) {
                 LOG.error("Failed to read content of {}: {}", record.target(), e);
                 break;
@@ -217,6 +176,7 @@ public abstract class WarcTestProcessor {
         public void setWarcId(int warcId) {
             this.warcId = warcId;
         }
+        @Override
         public void process(WarcRecord record, long offset) {
             if (!(record instanceof WarcResponse)) {
                 return;

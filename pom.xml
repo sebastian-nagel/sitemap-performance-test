@@ -48,7 +48,14 @@
       <version>${slf4j.version}</version>
     </dependency>
 
-     <dependency>
+    <dependency>
+      <!-- Support for Brotli Content-Encoding via jwarc -->
+      <groupId>org.brotli</groupId>
+      <artifactId>dec</artifactId>
+      <version>0.1.2</version>
+    </dependency>
+
+    <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-simple</artifactId>
       <version>${slf4j.version}</version>
