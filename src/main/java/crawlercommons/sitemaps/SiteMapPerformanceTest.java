@@ -154,11 +154,11 @@ public class SiteMapPerformanceTest extends WarcTestProcessor {
             LOG.debug("Parsing sitemap {}", url);
             sitemap = parser.parseSiteMap(content, url);
         } catch (UnknownFormatException e) {
-            LOG.error("Failed to parse sitemap {}: {}", urlString, e);
+            LOG.error("Failed to parse sitemap {}", urlString, e);
             counter.failedParse++;
             return;
         } catch (IOException e) {
-            LOG.error("Error processing sitemap {}: {}", urlString, e);
+            LOG.error("Error processing sitemap {}", urlString, e);
             counter.failedParse++;
             return;
         } finally {
