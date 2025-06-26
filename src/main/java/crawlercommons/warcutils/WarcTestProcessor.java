@@ -88,7 +88,14 @@ public abstract class WarcTestProcessor {
         if (!payload.isPresent()) {
             return new byte[0];
         }
-        MessageBody body = record.http().bodyDecoded();
+        MessageBody body;
+        try {
+            body = record.http().bodyDecoded();
+        } catch (IOException e) {
+            LOG.warn("Failed to decode WARC payload", e);
+            LOG.warn("Retrying payload without decoding");
+            body = record.http().body();
+        }
         long size = body.size();
         if (size > maxSize) {
             throw new IOException("WARC payload too large");
