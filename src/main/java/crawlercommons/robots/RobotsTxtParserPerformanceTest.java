@@ -21,6 +21,7 @@ import java.net.MalformedURLException;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 import org.netpreserve.jwarc.WarcRecord;
@@ -205,12 +206,13 @@ public class RobotsTxtParserPerformanceTest extends WarcTestProcessor {
         RobotsTxtParserPerformanceTest test = new RobotsTxtParserPerformanceTest();
 
         String robotName = System.getProperty("robot.name");
-        if (robotName == null || robotName.isBlank()) {
-            robotName = "*";
+        test.robotNames = Set.of(robotName.toLowerCase(Locale.ROOT));
+        if (robotName == null || robotName.isBlank() || robotName.strip().equals("*")) {
+            // test for default / wildcard user-agent
+            test.robotNames = Set.of();
         }
-        test.robotNames = Set.of(robotName);
         BaseRobotsParser parser = new SimpleRobotRulesParser();
-        LOG.info("Parsing robots.txt files for robot \"{}\" using {} (crawler-commons v{})", robotName, parser.getClass(), crawlercommons.CrawlerCommons.getVersion());
+        LOG.info("Parsing robots.txt files for user-agent \"{}\" ({}) using {} (crawler-commons v{})", robotName, test.robotNames, parser.getClass(), crawlercommons.CrawlerCommons.getVersion());
 
         test.run(parser, args);
     }
