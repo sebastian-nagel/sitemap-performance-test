@@ -19,8 +19,8 @@
     <slf4j.version>2.0.17</slf4j.version>
     <crawler-commons.version>1.5</crawler-commons.version>
     <rome.version>2.1.0</rome.version>
-    <jwarc.version>0.31.1</jwarc.version>
-    <junit.version>5.13.2</junit.version>
+    <jwarc.version>0.32.0</jwarc.version>
+    <junit.version>5.14.1</junit.version>
   </properties>
 
   <dependencies>
