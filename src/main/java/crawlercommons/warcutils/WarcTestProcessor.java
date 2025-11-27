@@ -33,8 +33,6 @@ public abstract class WarcTestProcessor {
     protected List<String> warcFiles = new ArrayList<>();
     protected List<FileChannel> warcChannels = new ArrayList<>();
 
-    protected enum ContentEncoding { NOT_SUPPORTED, IDENTITY, GZIP, DEFLATE };
-
     protected class Record {
         public long offset;
         public int status;
