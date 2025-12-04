@@ -17,6 +17,7 @@
 package commoncrawl.poc;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -34,6 +35,7 @@ import org.netpreserve.jwarc.WarcResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import crawlercommons.filters.basic.BasicURLNormalizer;
 import crawlercommons.warcutils.WarcTestProcessor;
 
 public class CanonicalLinkDetectorTest extends WarcTestProcessor {
@@ -88,6 +90,8 @@ public class CanonicalLinkDetectorTest extends WarcTestProcessor {
         /** top-N bytes of HTML to look for canonical link */
         private int chunkSize = 8192;
         private int maxLinks = 1;
+
+        BasicURLNormalizer urlNormalizer = new BasicURLNormalizer();
 
         /**
          * Extract canonical link from HTTP header.
@@ -194,15 +198,10 @@ public class CanonicalLinkDetectorTest extends WarcTestProcessor {
                 Record warcRecord = new Record(response, offset);
                 canonicalLinks = detectCanonicalLinksHttpHeader(warcRecord.httpHeaders.all("Link"), maxLinks);
                 if (!canonicalLinks.isEmpty()) {
-                    System.out.print(response.target());
-                    for (String cl : canonicalLinks) {
-                        System.out.print('\t');
-                        System.out.print(cl);
-                    }
-                    System.out.print('\n');
                     foundCanonicalLinks = true;
                     counter.canonicalLinksFound += canonicalLinks.size();
                     counter.canonicalLinksFoundHttp += canonicalLinks.size();
+                    printCanonicalLinks(response, canonicalLinks);
                     if (canonicalLinks.size() >= maxLinks) {
                         counter.success++;
                         counter.uniqUpdate(canonicalLinks);
@@ -230,20 +229,40 @@ public class CanonicalLinkDetectorTest extends WarcTestProcessor {
                     foundCanonicalLinks = true;
                     counter.canonicalLinksFound += canonicalLinks.size();
                     counter.canonicalLinksFoundHtml += canonicalLinks.size();
-                    System.out.print(response.target());
-                    for (String cl : canonicalLinks) {
-                        System.out.print('\t');
-                        System.out.print(cl);
-                    }
-                    System.out.print('\n');
+                    printCanonicalLinks(response, canonicalLinks);
                 }
                 if (foundCanonicalLinks) {
                     counter.success++;
                     counter.uniqUpdate(canonicalLinks);
+                } else {
+                    printCanonicalLinks(response, EMPTY_RESULT);
                 }
             } catch (IOException | IllegalArgumentException e) {
                 LOG.error("Failed to process WARC record " + url, e);
             }
+        }
+
+        private void printCanonicalLinks(WarcResponse response, List<String> canonicalLinks) {
+            printCanonicalLinks(response, canonicalLinks, System.out);
+        }
+
+        private void printCanonicalLinks(WarcResponse response, List<String> canonicalLinks, PrintStream out) {
+            out.print('\t');
+            out.print(response.target());
+            for (String cl : canonicalLinks) {
+                out.print('\t');
+                out.print(cl);
+                try {
+                    String normCl = urlNormalizer.filter(cl);
+                    if (normCl != null) {
+                        out.print('\t');
+                        out.print(normCl);
+                    }
+                } catch (Throwable e) {
+                    LOG.error("Failed to normalize URL: {}", cl, e);
+                }
+            }
+            out.print('\n');
         }
 
         public void useByteArrayCharSequence(boolean val) {
